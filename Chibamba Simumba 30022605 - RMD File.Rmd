@@ -1,0 +1,556 @@
+---
+title: "Data Mining"
+author: "Chibamba Simumba"
+date: "2023-03-14"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# TASK A
+
+We started by installing and loading all the required libraries as seen in the below chunk of code.
+
+```{r}
+library('tm')          # load the tm package for text mining
+library('SnowballC')   # load the SnowballC package for stemming
+library(wordcloud2)    # load the wordcloud2 package for word clouds
+library('RColorBrewer')# load the RColorBrewer package for color palettes
+library('tidyverse')   # load the tidyverse package for data wrangling
+library('tidytext')    # load the tidytext package for text data manipulation
+library('topicmodels') # load the topicmodels package for topic modeling
+library('lda')         # load the lda package for Latent Dirichlet Allocation modeling
+library(wordcloud)
+```
+
+## Data Inspection and Familarisation
+
+-   We started by loading the data file and there after inspected it to check its content. As it can be seen in the output below the file the dataset had 11 columns and 23,486 rows using the GLIMPSE function, however, for purpose of this analysis we focused on a column called "Review.Text". We used a function called SELECT to filter only that column with customer reviews for our analysis as see below and inspected the file.
+
+```{r}
+
+# Reading the dataset
+raw_reviews <-read.csv("MS4S09_CW_Data.CSV" )#fileEncoding = "UTF-8"
+
+# Inspecting the content of the file
+
+glimpse(raw_reviews)
+
+# Keep only the review text column
+reviews <- select(raw_reviews, Review.Text,Rating)
+glimpse(reviews) # inspecting the customer reviews
+```
+
+### Initial Observations
+
+-   The initial inspection of the text revealed the following thing:
+
+1.  Mispelled words, for instance, luv, matvehd, flatttering, pettte, etc.
+2.  The text content special characters like \@, #, /, etc.
+3.  Inconsistent text case.
+4.  Stop words.
+
+## TEXT PRE PROCESSING
+
+In this section, we predominately concentrated on text mining pre-processing steps, in other words converting text into semi-structured data to allow us apply analytical techniques. This is a very important step in any text mining project, it was that reason that we spent a considerable amount of time and effort cleaning the dataset to avoid compromising on the quality of results.
+
+This was accomplished using the following steps:
+
+-   We first started by removing frequent words that do not contain much information, called stop words, for instance words like "a," "of," etc. Additionally, we also created a list of stop words of words we determined to be of little or no value to the analysis.
+
+-   Next, we removed all the numbers from the raw data and removed all punctuation from the dataset as they could interfere with our analysis if left unchecked.
+
+-   Next, performed a process called tokenisation on the text, which is the processing of splitting text into tokens with a function called UNNEST_TOKENS. This step is important because it will allow us to count and filter individual words during the analysis stage.
+
+-   We then removed all non-alphabetic and special characters using the str_replace_all() function .The str_replace_all() function replaces any characters that are not letters with an empty string.
+
+-   Further, we proceed to Convert the text to lower case as part of the cleaning and transformation process.
+
+-   Additionally, created a custom word replacement to fix all misspelled words in the data file.
+
+-   Lastly, we performing a process called stemming on the text, which is the process of reducing words to their root form.
+
+## Text Cleaning and Transformation
+
+```{r}
+# Remove english common stopwords and Tokenize
+data(stop_words)
+
+clean_reviews <- reviews %>%
+  
+  mutate(Review.Text = gsub("[0-9]+", "", Review.Text)) %>% # remove numbers
+  
+  # Tokenize
+  unnest_tokens(word, `Review.Text`) %>%
+
+  # Remove english common stopwords
+  anti_join(stop_words) %>%
+  
+  # Removing all non-alphabetic characters
+  mutate(word = str_replace_all(word, "[^[:alpha:]]", "")) %>%
+  filter(nchar(word) > 2) %>%
+  
+  # Convert the text to lower case
+  mutate(word = tolower(word))#%>%
+  
+  # stemming
+  #mutate(word = stemDocument(word, language = "english"))
+
+
+```
+
+## Fixing Misspelling and Removing Custom Stop words
+
+-   Fixing misspellings, removing custom stop words and other words that determined to be of little or no value to the analysis.
+-   The cleaning process was repeated several times which indicated that this process is an iterative process.
+
+```{r}
+# define custom stopwords
+custom_stopwords <- c("hte", "teh", "aaaaannnnnnd","aaaaandidontwanttopayforshipping", "aaaahs", "oops", "sooo", "lbs", "waas", "grrrrrrrrrrr", "waas", "aaaahs", "aaahed", "aame", "aka", "flo", "difini","to", "buttt", "ttt","wayyy" )
+
+# remove custom stopwords
+clean_reviews <- clean_reviews %>%
+  filter(!word %in% custom_stopwords)
+
+# replace custom with a new word or character
+
+
+clean_reviews$word <- gsub("luv", "love", clean_reviews$word)
+clean_reviews$word <- gsub("litttle", "little", clean_reviews$word)
+clean_reviews$word <- gsub("pettte", "petite", clean_reviews$word)
+clean_reviews$word <- gsub("petitethe", "petite", clean_reviews$word)
+clean_reviews$word <- gsub("flatttering", "flattering", clean_reviews$word)
+clean_reviews$word <- gsub("pattten", "pattern", clean_reviews$word)
+clean_reviews$word <- gsub("matvehd", "matched", clean_reviews$word)
+clean_reviews$word <- gsub("msallet", "smallest", clean_reviews$word)
+clean_reviews$word <- gsub("ejans", "jeans", clean_reviews$word)
+clean_reviews$word <- gsub("jkeep", "keep", clean_reviews$word)
+clean_reviews$word <- gsub("abck", "back", clean_reviews$word)
+clean_reviews$word <- gsub("everythiing", "everything", clean_reviews$word)
+clean_reviews$word <- gsub("absolutley", "absolutely", clean_reviews$word)
+clean_reviews$word <- gsub("disppointedi", "disappointed", clean_reviews$word)
+clean_reviews$word <- gsub("tts", "true to size", clean_reviews$word)                          
+clean_reviews$word <- gsub("absolutly", "absolutely", clean_reviews$word)
+
+
+# remove custom stopwords
+clean_reviews <- clean_reviews %>%
+  filter(!word %in% custom_stopwords)%>%
+  
+  # stemming
+  mutate(word = stemDocument(word, language = "english"))
+                    
+```
+
+## Customer Reviews Visualizations
+
+-   After cleaning and transforming the text, we proceed to inspect and count the clean text to check for the top ten most common words in the customer reviews text using the dplyr's count function.
+-   As it can be seen from the below output, DRESS was the most common word in text, followed by the word FIT then LOVE and SIZE.
+
+```{r}
+clean_reviews %>%   # take the data frame 'clean_reviews'
+  count(word, sort = TRUE)  # count the frequency of each word, sort in descending order
+```
+
+# Plots word frequencies
+
+## Generate the Word cloud
+
+-   Now we proceeded the above result in a visual called WordCloud. A WordCloud is a Text mining methods allow us to highlight the most frequently used keywords in texts. Using a WordCloud2 package we visualise the top 2000 most frequent words in the customer reviews text.
+
+-   A World Cloud is a representation strategy that shows how words appear in a given body of content as often as possible by measuring each observation relative to its recurrence. All the comments are, at that point, organized in a cluster or cloud of words. The larger the font size of a word, the more frequently it appears.
+
+-   As we can see in the below output the word DRESS has the largest font size indicating its high frequent in the text. Followed by the word FIT the LOVE. This appeared to be in line with what was earlier observed from the word count.
+
+```{r}
+clean_reviews %>%   # take the data frame 'clean_reviews'
+  count(word, sort = TRUE) %>%   # count the frequency of each word, sort in descending order
+  head(2000) %>%   # take the top 2000 most frequent words
+  wordcloud2(     # create a word cloud using the wordcloud2 package
+    size = 0.8,   # set the size of each word in the cloud
+    shape = "heart",   # set the shape of the word cloud to a circle
+    color = brewer.pal(8, "Dark2"),   # set the color palette for the words
+    backgroundColor = "white",   # set the background color of the word cloud to white
+    rotateRatio = 0.5)   # set the rotation ratio for the words in the cloud
+
+```
+
+## Generate the Bar Plot
+
+Additionally, the word frequency can also be visualised using a bar plot as seen below. The plot too indicated that words like DRESS, FIT and LOVE topped the list in term count.
+
+```{r}
+clean_reviews %>%                      # Take the "clean_reviews" data frame and pass it to the next function using the pipe operator (%>%)
+  count(word, sort = TRUE) %>%        # Count the frequency of each unique word in the "word" column and sort in descending order
+  filter(n > 3000) %>%                # Filter to only include words with a count greater than 3000
+  mutate(word = reorder(word, n)) %>% # Reorder the words based on their frequency count 
+  ggplot(aes(word, n)) +              # Initialize a ggplot object and set the x-axis to the "word" column and y-axis to the "n" column
+  geom_col() +                         # Add a column chart to visualize the word frequency
+  xlab(NULL) +                         # Remove the x-axis label
+  coord_flip() 
+
+
+```
+
+## Genarate WordCloud Per Rating Category
+
+```{r}
+# Create a list of reviews grouped by rating
+reviews_list <- split(raw_reviews$Review.Text, raw_reviews$Rating)
+
+# Set up color palette for word clouds
+color_palette <- brewer.pal(length(reviews_list), "Set3")
+
+# Define a custom list of stopwords to remove from the text
+my_stopwords <- c(stopwords("english"), "will","hte", "teh", "aaaaannnnnnd","aaaaandidontwanttopayforshipping", "aaaahs", "oops", "sooo", "lbs", "waas", "grrrrrrrrrrr", "waas", "aaaahs", "aaahed", "aame", "t")
+
+# Create and plot word clouds for each rating
+par(mfrow=c(2,3)) # Set up plot layout
+for (i in 1:length(reviews_list)) {
+  rating_reviews <- reviews_list[[i]]
+  
+  # Remove punctuation, convert to lowercase, and split into words
+rating_reviews_clean <- str_replace_all(rating_reviews, "[^[:alnum:]\\s]", " ")
+rating_reviews_clean <- str_replace_all(rating_reviews_clean, "\\d+", " ")
+rating_reviews_clean <- str_replace_all(rating_reviews_clean, "[[:punct:]]", " ")
+rating_reviews_clean <- tolower(rating_reviews_clean)
+rating_reviews_clean <- unlist(strsplit(rating_reviews_clean, "\\s+"))
+ 
+  # Remove stopwords
+  rating_reviews_clean <- rating_reviews_clean[!rating_reviews_clean %in% my_stopwords]
+  
+  #rating_reviews_clean = stemDocument(rating_reviews_clean, language = "english")
+  
+  # Create word frequency table and plot word cloud
+  rating_word_freq <- table(rating_reviews_clean)
+  rating_wordcloud <- wordcloud(names(rating_word_freq), rating_word_freq,max.words = 100, random.order = FALSE, rot.per = 0, colors = color_palette[i], main = paste0("Rating ", i), scale=c(3,0.2))
+
+  
+  # Add label to word cloud
+  title(paste0("Word Cloud for Rating ", i), line = 1, col.main = "black", cex.main = 1.5)}
+
+```
+
+### Insights
+
+-   The above plots suggested that the most of the customer reviews were on the dresses. The majority of the customers had made reviews on the size of the dresses and how they fitted them. Again, on the other hand appeared to to be frequent across the five Rating categories which further suggested that reviews about dresses, tops and fit were both positive and negative.
+
+-   The plots also highlighted the word LOVE as frequent which could suggested that they loved the dresses and most of them were true to size. This position was further supported by the Rating wordcloud which indicated that the word LOVE only appeared in Rating 5.
+
+-   TOP was another frequent word, this suggested that the majority of the reviews were about the TOPs and well while on the hand other expressed concerns over the fit of the TOPS. This could mean that the word TOP was associated to both good and bad customer reviews.
+
+-   At this stage we can only suggest and assume as we need more data to draw solid conclusion
+
+# TASK B
+
+## Sentiment Analysis
+
+In this section we performed explored mined sentiments or opinions from the customer reviews using two lexicons, namely Bing and NRC the compared the results from the two.
+
+## Sentiment Analysis using Bing Lexicon
+
+-   We started by calculating sentiment using Bing Lexicon and the overall results suggested that we had positive sentiments from the customer reviews using the inner join function. The difference between the positive and negative sentiments was 50,007 according to the bing lexicon.
+
+-   Next we inspect the sentiment composition as seen in the below output.
+
+```{r}
+
+# For calculating sentiment using Bing Lexicon
+
+clean_reviews %>%   # take the data frame 'clean_reviews'
+  inner_join(get_sentiments("bing")) %>%   # join with the sentiment lexicon "bing", keeping only sentiment words
+  count(sentiment) %>%   # count the number of positive and negative words
+  spread(sentiment, n, fill = 0) %>%   # reshape the data so that it is wide instead of narrow, filling missing values with 0
+  mutate(sentiment = positive - negative)   # create a new column called 'sentiment', which is the difference between the number of positive and negative words
+
+
+```
+
+## Inspecting the Sentiments
+
+-   Next, we inspected the sentiments by count and arranging them in descending order starting with the highest as seen below.
+
+```{r}
+
+
+sent_review <- clean_reviews %>%   # take the data frame 'clean_reviews'
+  inner_join(get_sentiments('bing'))   # join with the sentiment lexicon "bing", keeping only sentiment words
+
+sent_review %>%   # take the resulting data frame 'sent_review'
+  count(word, sentiment) %>%   # count the number of occurrences of each word with each sentiment
+  arrange(desc(n))   # arrange the data frame in descending order by the count of occurrences
+
+```
+
+## Generating Bar Plot for Contribution to Sentiment Using BING Lexicon
+
+-   We proceeded to produce visual plots for the earlier stated position of the bing lexicon sentiment analysis results.
+
+```{r}
+
+
+bing_sentiments <- clean_reviews %>%   # take the data frame 'clean_reviews'
+  inner_join(get_sentiments("bing")) %>%   # join with the sentiment lexicon "bing", keeping only sentiment words
+  count(word, sentiment, sort = TRUE) %>%   # count the number of occurrences of each word with each sentiment, and sort by count in descending order
+  ungroup()   # remove grouping information from the resulting data frame
+
+
+bing_sentiments <- clean_reviews %>% 
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort=TRUE) 
+
+# Plot the Frequency of each sentiment category
+ggplot(data=bing_sentiments, aes(x=reorder(sentiment, -n, sum), y=n)) + 
+  geom_bar(stat="identity", aes(fill=sentiment), show.legend=FALSE) +
+  labs(x="Sentiment", y="Frequency") +
+  theme_bw()
+
+# Top 10 terms for each sentiment
+
+bing_sentiments %>%   # take the resulting data frame 'bing_word_counts'
+  group_by(sentiment) %>%   # group the data frame by sentiment
+  slice_max(n, n = 10) %>%   # for each sentiment, take the top 10 words with the highest counts
+  ungroup() %>%   # remove grouping information from the resulting data frame
+  mutate(word = reorder(word, n)) %>%   # reorder the words by count in descending order
+  ggplot(aes(n, word, fill = sentiment)) +   # create a ggplot object with the count of words on the x-axis, the words on the y-axis, and the sentiment as the fill color
+  geom_col(show.legend = FALSE) +   # add a bar plot layer to the ggplot object
+  facet_wrap(~sentiment, scales = "free_y") +   # facet the plot by sentiment, with free y-axis scales
+  labs(x = "Contribution to sentiment", y = NULL)   # add x- and y-axis labels to the plot
+
+```
+
+-   From the bar plot, we observed that the bing lexicon sentiment results were predominately positive.
+
+-   We further plotted the sentiment contribution for Top 10 terms for each sentiment category. The plot was the break down of the sentiments into individual terms or words and, noted that LOVE term was the highest contributor to the positive sentiments. On the other hand, the term FALL was the highest contributor to the negative sentiments, followed by the WORN then BUST.
+
+-   This plot too further supported the notion that we had positive sentiment from the customer reviews.
+
+## Postive and Negative WordCloud
+
+-   Also created a plot for the most positive and negative words in term of sentiments for the customer reviews. This plot too emphasised the position that we had more positive sentiments than negatives.
+
+```{r}
+library(reshape2)
+
+clean_reviews %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = brewer.pal(8, "Dark2"),
+                   max.words = 100)
+
+
+```
+
+## Generating Bar Plot for Contribution to Sentiment Using NRC lexicon
+
+-   In this section we used the NRC lexicon to perform a sentiment analysis. The NRC lexicon categories words in a binary fashion into categories of positive, negatives, anger, anticipation, disgust, fear, joy, sadness, surprise and trust.
+
+```{r}
+
+# Use the tidyverse package to join cleaned reviews with NRC sentiment lexicon and count occurrences of each sentiment-word pair
+
+nrc_sentiments <- clean_reviews %>% 
+  inner_join(get_sentiments("nrc")) %>%
+  count(word, sentiment, sort=TRUE) 
+
+# Create a bar chart showing the frequency of each sentiment category
+
+ggplot(data=nrc_sentiments, aes(x=reorder(sentiment, -n, sum), y=n)) + 
+  geom_bar(stat="identity", aes(fill=sentiment), show.legend=FALSE) + # create a bar chart with sentiment on x-axis and frequency on y-axis
+  labs(x="Sentiment", y="Frequency") + # add x-axis and y-axis labels
+  theme_bw() # use a black and white theme
+
+# Create a bar chart showing the top 10 most frequent words for each sentiment category
+
+nrc_sentiments %>%
+  group_by(sentiment) %>%
+  arrange(desc(n)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(word, n), y=n)) +
+  geom_col(aes(fill=sentiment), show.legend=FALSE) + # create a bar chart with words on x-axis and frequency on y-axis
+  facet_wrap(~sentiment, scales="free_y") + # facet by sentiment category and free y-axis scales
+  labs(y="Frequency", x="Words") + # add x-axis and y-axis labels
+  coord_flip() + # flip the chart on its side
+  theme_bw() # use a black and white theme
+
+
+```
+
+-   NRC lexicon was also included because we wanted to specifically target reviews with 3 rating which appeared to be in between positive and negative.
+
+-   And from the observing the below output, we see that POSITIVE sentiment was the highest followed TRUST, then JOY,ANTICIPATION and NEGATIVE.
+
+-   NRC lexicon also suggested that the customers sentiments were positive and of course we others who express anger, disgust and fear.
+
+-   The Negative sentiments from the NRC lexicon came from the word WEAR.
+
+## Insights From Bing and NRC Lexicons
+
+-   In general the results from both lexicons suggested that overall the sentiments from the customer reviews were positive. This could mean that the majority of the customers were happy with the retailers products and services based on the reviews especially with TOPs and Dresses. On the hand other handle there were also negative sentiments from the word WEAR and FALL ranked high in both lexicons.
+
+-   Based on the sentiment the retailer may wish to consider looking further in the sentiments associated with the word FALL as appeared in both negative and positive reviews. Some customers raised concerns about how the dress FALL in some area while other were happy with the how it would FALL right. Other customers based on the reviews complained about buttons FALL. In other reviews FALL referred to a season of the year.
+
+# TASK C
+
+## TOPIC MODELLING
+
+### creating the document-term matrix
+
+In this section we explored the customer reviews text data in the hope of understanding some hidden topics. A topic model is a type of statistical model for discovering the abstract "topics" that occur in a collection of documents. In this analysis we used a popular method used to fit topic model called latent Dirichlet allocation, LDA for short. LDA works based on to important principles, it treats each document as a mixture of topics, and each topic as a mixture of words
+
+-   We started off by creating creating a document term matrix by first grouping the row number using the groupby() function and word and count the frequency of each word in each document in the Clean_reviews file. We the converted the data frame into a document term matrix using the cast_dtm() function as seen below.
+
+```{r}
+# creating the document-term matrix
+
+# Group by row number and word and count the frequency of each word in each document
+
+dtm <- clean_reviews %>% # take the clean_reviews data frame
+  group_by(row_number()) %>% # group the rows by row number
+  unnest(word) %>%      # separate each word into a new row
+  count(word)           # count the frequency of each word in each document
+
+# Convert the data frame into a document-term matrix
+
+# take the dtm data frame
+
+dtm <- dtm %>% 
+  
+# convert to a document-term matrix
+  
+  cast_dtm(document = row_number(), term = word, value = n) 
+
+```
+
+### Model fitting using the LDA
+
+We used the latent Dirichlet allocation method to fit a five-topic model k=5 using the LDA() function from the topic model library. We passed the document term matrix created earlier to the LDA function and set a seed to keep our outputs constant and reproducible.
+
+It is worth mentioning that the initial value of k was purely random and we repeated model fitting process while adjusting the value of k. In our case we settle for the five-topic model as it appeared to be the most optimal value.
+
+-   We then inspected the results of the fitted model using a function called term() as seen in the below output.
+
+```{r}
+# set a seed so that the output of the model is predictable
+cr_lda <- LDA(dtm,k = 5, control = list(seed = 1234))
+
+#Inspect the LDA Output
+
+terms(cr_lda,5)
+
+```
+
+-   After that we then extracted the topic term matrix from the LDA fitted model using the tidytext package as seen in the below output. Basically at this stage we pulled out the betas and grouping them and counting the top ten per topic.Betas are the probabilities of each word being associated with each topic as seen below.
+-   After that we then visualise the result in bar plots for each topic displaying the words associated to each topic with their betas. See below figures for details.
+
+```{r}
+# Extract topic-term matrix from pre-trained LDA model using tidytext package
+cr_topics <- tidy(cr_lda, matrix = "beta")
+cr_topics
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Use the tidyverse package to group the topics and select the top 10 terms with the highest beta value for each topic
+
+cr_top_terms <- cr_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% # select the top 10 terms with the highest beta value for each topic
+  ungroup() %>%
+  arrange(topic, -beta) # sort by topic and then by decreasing beta value
+
+
+# Create a bar chart showing the top terms for each topic
+
+cr_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) + # create a bar chart with beta value on x-axis, term on y-axis, and color-coded by topic
+  geom_col(show.legend = FALSE) + # use the "geom_col" function to create a column chart
+  facet_wrap(~ topic, scales = "free") + # facet by topic and allow free y-axis scales
+  scale_y_reordered() # reorder the y-axis based on the beta values within each topic
+
+
+```
+
+## Insights: Topics
+
+-   Topic One. Clothing Quality Satisfaction: As seen above, topic one was the combination of general words. This discussion included word like love, wear, top, dress, perfect, color, nice, fabric, cut and beautiful. This discussion appeared to be general, however, the words like love, wear and top had higher probability betas. The words included in this topic are related to positive feeling and satisfaction about clothing.
+
+-   Topic Two. General Fit and Size: Fit and Size had the highest probability betas which suggested that they are associated to this particular topic. Words like dress and shirt indicated that the discussion was about different clothing lines or products. And also words like length and petite further supports the notion that this discussion was about size and fit of different clothing product like shirts.
+
+-   Topic Three. Clothing Reviews: The word combination for this topic appeared random which suggested that the discussion was about different things like size, dress colour or, fit, shirt and top. After a close inspection of the customer reviews the majority of the words in this topic appeared with the word review. The words size and dress had the highest probability betas further indicated that the discussion were as mostly about the reviews related to size and dresses.
+
+-   Topic Four. Clothing Fit and Size Satisfaction: The words included in this topic appeared to be related to positive feeling and satisfaction about clothing fit and size. This is because the word love had the highest probability beta then followed by fit and size. Other words like short, wear, perfect and cute could easily be related to size, fit and positive feeling.
+
+-   Topic Five. Dress and Top Fitting: Dress and Top had the highest probability betas followed by Fit. This indicated that the discussion was predominately about how the Dress and Tops fit by the customers. Words like comfort, soft and fabric suggested that the customers were talking about how comfortable and soft the fabric is for the dress and tops.
+
+# TASK D
+
+## LOGISTICS REGRESSION
+
+In this section a used logistics regression to create a classification model that is able to classify whether could recommend the product using variable called Recommended IND as the target using other variable like Age, Rating and Positive Feedback Count as model as predictors.
+
+-   We started by selecting the variables of interest( in this Age, Rating and Positive Feedback) as independent variables. Next we separated the target variable from the entire dataset( in this case Recommended.IND) as seen below. We then proceeded to cleaning the dataset by removing all missing values and further moved to perform the Training and test split. Finally we fitted the model on the dataset and evaluated the model's performance.
+
+-   We fitted a classification model using logistics regression and the model was able to accurately predict the customer recommendations based on the variables like customers Age, Rating and Positive-Feedback-Count.
+
+-   From observing the below confusion matrix the algorithm performed very well and predicted that 5480 where true positive and 1138 where true negatives with very small number of miss-classification.
+
+-   pred 0 1 0 1166 330 1 149 5401
+
+```{r}
+# Selecting variable of interest from the raw dataset
+log_reviews <- raw_reviews %>%
+  select(Age, Rating, Recommended.IND, Positive.Feedback.Count)
+
+# Selection Recommended.IND as a Target variable
+log_reviews$Recommended.IND <- as.factor(log_reviews$Recommended.IND)
+
+# Clean the data by removing missing values
+
+log_reviews <- na.omit(log_reviews)
+
+# Training and Test sets Split
+
+set.seed(12) # set the random seed for reproducibility
+train_idx <- sample(nrow(log_reviews), nrow(log_reviews)*0.7) # randomly select 70% of the rows as the training set
+train <- log_reviews[train_idx, ] # subset the training set
+test <- log_reviews[-train_idx, ] # subset the test set (the remaining 30%)
+
+# Fit the log_regression model
+
+model <- glm(Recommended.IND ~ Rating + Age + Positive.Feedback.Count, data = train, family = "binomial")
+
+
+# Predict on the test set
+pred <- predict(model, newdata = test, type = "response")
+pred <- ifelse(pred > 0.5, 1, 0)
+
+# Evaluate model performance on test set
+table(pred, test$Recommended.IND)
+
+# # Producing a Summary of the model results
+summary(model)
+
+```
+
+# References
+
+1.  ttps://www.howtogeek.com/780627/what-does-tts-mean-and-how-do-you-use-it/#:\~:text=TTS%20stands%20for%20"true-to,in%20the%20uppercase%20"TTS."
+
+2.  <https://github.com/topics/topic-modeling?l=r>
+
+3.  <https://www.tidytextmining.com/usenet.html>
+
+4.  <https://www.youtube.com/watch?v=m8r7WtZ0voQ&t=1122s>
+
+5.  <https://www.youtube.com/redirect?event=video_description&redir_token=QUFFLUhqbWRma3VMd3ZNbnd2MzAwT3B2NFdyNGU3anRCZ3xBQ3Jtc0ttdHFZd0hrLUNEY185aVFyRGxPeVpzRFc1RHRhaVV2cXZncUZOanE0ZmtIMVhsbDZLUkd6SmFNbk8yRDVZdlJVZGV0aTdjekJaaWxsRGJCTllUOTRlMkQ2TXVyeHpjWV9iVHo0NVVGTFplMWtZTjJvVQ&q=https%3A%2F%2Fgithub.com%2Fccs-amsterdam%2Fr-course-material%2Fblob%2Fmaster%2Ftutorials%2Fr_text_lda.md&v=4YyoMGv1nkc>
